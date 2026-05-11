@@ -1,0 +1,26 @@
+{
+	"geode": "5.7.0",
+	"gd": {
+		"win": "2.2081",
+		"android": "2.2081",
+		"mac": "2.2081",
+		"ios": "2.2081"
+	},
+	"id": "abb2k.rig",
+	"name": "rig",
+	"version": "v1.0.0",
+	"developer": "abb2k",
+	"description": "",
+	"dependencies": {
+		"geode.node-ids": ">=v1.23.3",
+		"geode.devtools": {
+			"version": ">=1.13.0",
+			"required": false
+		}
+	},
+	"resources": {
+		"sprites": [
+			"resources/*.png"
+		]
+	}
+}
