@@ -1,4 +1,4 @@
-#include "ModelLoader.hpp"
+#include <ModelLoader.hpp>
 
 std::map<std::filesystem::path, std::shared_ptr<tinygltf::Model>> ModelLoader::m_cachedModels{};
 

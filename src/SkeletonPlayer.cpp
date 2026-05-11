@@ -2,7 +2,7 @@
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 
-#include "SkeletonPlayer.hpp"
+#include <SkeletonPlayer.hpp>
 
 SkeletonPlayer* SkeletonPlayer::create() {
     auto ret = new SkeletonPlayer();

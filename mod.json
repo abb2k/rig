@@ -9,6 +9,7 @@
 	"id": "abb2k.rig",
 	"name": "rig",
 	"version": "v1.0.0",
+	"tags": ["api"],
 	"developer": "abb2k",
 	"description": "",
 	"dependencies": {
@@ -17,6 +18,11 @@
 			"version": ">=1.13.0",
 			"required": false
 		}
+	},
+	"api": {
+		"include": [
+			"src/*.hpp"
+		]
 	},
 	"resources": {
 		"sprites": [
