@@ -22,9 +22,9 @@ bool BoneNode::init(int gltfIndex, const std::string& name) {
 }
 
 void BoneNode::syncProxies() {
-    m_uiTrans *= GLB_PIXEL_SCALE;
-    m_uiScale *= GLB_PIXEL_SCALE;
-    m_uiRot *= GLB_PIXEL_SCALE;
+    m_uiTrans = m_localTrans * GLB_PIXEL_SCALE;
+    m_uiScale = m_localScale * GLB_PIXEL_SCALE;
+    m_uiRot = m_localRot * GLB_PIXEL_SCALE;
 
     m_devLastTrans = m_uiTrans;
     m_devLastScale = m_uiScale;
@@ -136,9 +136,9 @@ void BoneNode::registerDevTools() {
 
         if (posChanged || scaleChanged || rotChanged) {
             
-            node->m_localTrans /= GLB_PIXEL_SCALE;
-            node->m_localScale /= GLB_PIXEL_SCALE;
-            node->m_localRot /= GLB_PIXEL_SCALE;
+            node->m_localTrans = node->m_uiTrans / GLB_PIXEL_SCALE;
+            node->m_localScale =  node->m_uiScale / GLB_PIXEL_SCALE;
+            node->m_localRot = node->m_uiRot / GLB_PIXEL_SCALE;
 
             if (rotChanged) {
                 float mag = node->m_localRot.magnetude();

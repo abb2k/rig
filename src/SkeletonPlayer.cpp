@@ -178,7 +178,7 @@ void SkeletonPlayer::draw() {
 
         glVertexAttribPointer(kCCVertexAttrib_Position, 3, GL_FLOAT, GL_FALSE, sizeof(SkinnedVertex), &sub.renderVertices[0].pos);
         glVertexAttribPointer(kCCVertexAttrib_TexCoords, 2, GL_FLOAT, GL_FALSE, sizeof(SkinnedVertex), &sub.renderVertices[0].uv);
-        glVertexAttribPointer(kCCVertexAttrib_Color, 4, GL_FLOAT, GL_FALSE, sizeof(SkinnedVertex), &sub.renderVertices[0].color); // <-- Safely pointing to the array
+        glVertexAttribPointer(kCCVertexAttrib_Color, 4, GL_FLOAT, GL_FALSE, sizeof(SkinnedVertex), &sub.renderVertices[0].color);
 
         CCTexture2D* activeTex = nullptr;
 
@@ -399,7 +399,7 @@ void SkeletonPlayer::extractAnimations() {
     }
 
 
-    tinygltf::Animation* activeAnim = nullptr;
+    const tinygltf::Animation* activeAnim = nullptr;
 
     for (auto& anim : m_model->animations) {
         if (anim.channels.empty()) continue;
@@ -446,7 +446,7 @@ void SkeletonPlayer::applyAnimations(float time) {
             factor = 0.f;
         } else {
             for (size_t i = 0; i < track.times.size() - 1; ++i) {
-                if (time < track.times[i] && time >= track.times[i+1]) continue;
+                if (time < track.times[i] || time >= track.times[i+1]) continue;
 
                 frame = i; 
                 nextFrame = i + 1;
@@ -573,7 +573,7 @@ void SkeletonPlayer::applySkinning() {
                 finalPos = nodeGlobalMat * base;
             }
 
-            sub.renderVertices[i].pos *= GLB_PIXEL_SCALE;
+            sub.renderVertices[i].pos = finalPos * GLB_PIXEL_SCALE;
             sub.renderVertices[i].uv = sub.uvs[i];
             
             sub.renderVertices[i].color = {
