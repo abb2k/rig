@@ -126,12 +126,9 @@ void SkeletonPlayer::update(float dt) {
 
     for (auto& [id, bone] : m_boneNodes) bone->syncFromCCNode();
 
-    Mat4 worldRoot;
-    worldRoot.identity(); // CRITICAL: Ensure this isn't all zeros!
-
-    int sceneIdx = m_model->defaultScene > -1 ? m_model->defaultScene : 0;
-    for (int rootNode : m_model->scenes[sceneIdx].nodes) {
-        recalcGlobalMatrices(rootNode, worldRoot);
+    int sceneIndex = m_model->defaultScene > -1 ? m_model->defaultScene : 0;
+    for (int root : m_model->scenes[sceneIndex].nodes) {
+        recalcGlobalMatrices(root, Mat4());
     }
 
     applySkinning();
@@ -438,14 +435,6 @@ void SkeletonPlayer::extractAnimations() {
 void SkeletonPlayer::applyAnimations(float time) {
     for (auto& track : m_tracks) {
         if (track.times.empty() || track.values.empty()) continue;
-
-        auto it = m_boneNodes.find(track.targetNode);
-        
-        if (it == m_boneNodes.end() || it->second == nullptr) {
-            continue; 
-        }
-        
-        auto bone = it->second;
         
         int frame = 0;
         int nextFrame = 0;
@@ -479,6 +468,7 @@ void SkeletonPlayer::applyAnimations(float time) {
 
         auto& v0 = track.values[vIdx0]; 
         auto& v1 = track.values[vIdx1];
+        auto bone = m_boneNodes[track.targetNode];
 
         if (track.path == GLB_ANIM_PATH_TRANSLATION) {
             Vec3 t = Vec3::lerp({
@@ -524,58 +514,30 @@ void SkeletonPlayer::applyAnimations(float time) {
 }
 
 void SkeletonPlayer::recalcGlobalMatrices(int nodeIndex, const Mat4& parentGlobal) {
-    // 1. Safety check for model bounds
-    if (nodeIndex < 0 || nodeIndex >= m_model->nodes.size()) return;
-
-    Mat4 currentGlobal;
-    auto it = m_boneNodes.find(nodeIndex);
-
-    if (it != m_boneNodes.end() && it->second != nullptr) {
-        // CASE: Physical BoneNode
-        auto bone = it->second;
-        
-        // Calculate: Global = Parent * Local
-        Mat4 localMat = Mat4::fromTRS(
-            bone->getLocalTranslation(), 
-            bone->getLocalRotation(), 
-            bone->getLocalScale()
-        );
-        
-        bone->setGlobalMatrix(parentGlobal * localMat);
-        currentGlobal = bone->getGlobalMatrix();
-
-        // Update skinning joints
-        if (!m_model->skins.empty()) {
-            auto& skin = m_model->skins[0];
-            for (size_t i = 0; i < skin.joints.size(); ++i) {
-                if (skin.joints[i] == nodeIndex) {
-                    m_globalJointMatrices[i] = currentGlobal * m_inverseBindMatrices[i];
-                    break;
-                }
-            }
+    if (m_boneNodes.find(nodeIndex) == m_boneNodes.end()) {
+        for (int child : m_model->nodes[nodeIndex].children) {
+            recalcGlobalMatrices(child, parentGlobal);
         }
-    } else {
-        // CASE: "Ghost" node (Mesh/Empty/Camera)
-        // Even if we don't see it, we MUST account for its position in the file
-        auto& gltfNode = m_model->nodes[nodeIndex];
-        
-        Vec3 t = {0,0,0}, s = {1,1,1}; 
-        Quat r = {0,0,0,1};
-        
-        if (gltfNode.translation.size() == 3) 
-            t = {(float)gltfNode.translation[0], (float)gltfNode.translation[1], (float)gltfNode.translation[2]};
-        if (gltfNode.rotation.size() == 4) 
-            r = {(float)gltfNode.rotation[0], (float)gltfNode.rotation[1], (float)gltfNode.rotation[2], (float)gltfNode.rotation[3]};
-        if (gltfNode.scale.size() == 3) 
-            s = {(float)gltfNode.scale[0], (float)gltfNode.scale[1], (float)gltfNode.scale[2]};
-        
-        Mat4 localMat = Mat4::fromTRS(t, r, s);
-        currentGlobal = parentGlobal * localMat;
+        return;
     }
 
-    // 2. IMPORTANT: Pass 'currentGlobal' to children, NOT 'parentGlobal'
+    auto bone = m_boneNodes[nodeIndex];
+    
+    bone->setGlobalMatrix(parentGlobal * Mat4::fromTRS(bone->getLocalTranslation(), bone->getLocalRotation(), bone->getLocalScale()));
+
+    if (!m_model->skins.empty()) {
+        auto& skin = m_model->skins[0];
+
+        for (size_t i = 0; i < skin.joints.size(); ++i) {
+            if (skin.joints[i] != nodeIndex) continue;
+
+            m_globalJointMatrices[i] = bone->getGlobalMatrix() * m_inverseBindMatrices[i];
+            break;
+        }
+    }
+
     for (int child : m_model->nodes[nodeIndex].children) {
-        recalcGlobalMatrices(child, currentGlobal);
+        recalcGlobalMatrices(child, bone->getGlobalMatrix());
     }
 }
 
