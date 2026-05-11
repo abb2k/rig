@@ -5,7 +5,7 @@
 
 using namespace geode::prelude;
 
-class BoneNode : public CCNode {
+class RIG_DLL BoneNode : public CCNode {
 private:
     int m_gltfIndex;
     

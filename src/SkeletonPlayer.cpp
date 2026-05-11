@@ -25,6 +25,7 @@ bool SkeletonPlayer::init() {
 SkeletonPlayer::~SkeletonPlayer() {
     for (auto& [id, bone] : m_embeddedTextures) CC_SAFE_RELEASE(bone);
     for (auto& [id, bone] : m_customTextures) CC_SAFE_RELEASE(bone);
+    for (auto& [id, frame] : m_customFrames) CC_SAFE_RELEASE(frame);
 }
 
 void SkeletonPlayer::setColor(const ccColor3B& color) {
@@ -90,11 +91,32 @@ void SkeletonPlayer::setTextureForMesh(const std::string& meshName, CCTexture2D*
         CC_SAFE_RELEASE(m_customTextures[meshName]);
     }
 
+    if (m_customFrames.count(meshName)) {
+        CC_SAFE_RELEASE(m_customFrames[meshName]);
+        m_customFrames.erase(meshName);
+    }
+
     if (tex){
         tex->retain();
     }
 
     m_customTextures[meshName] = tex;
+}
+
+void SkeletonPlayer::setSpriteForMesh(const std::string& meshName, const std::string& spriteName) {
+    auto tex = CCTextureCache::sharedTextureCache()->addImage(spriteName.c_str(), false);
+
+    setTextureForMesh(meshName, tex);
+}
+
+void SkeletonPlayer::setSpriteForMeshWithFrameName(const std::string& meshName, const std::string& frameName) {
+    auto frame = CCSpriteFrameCache::sharedSpriteFrameCache()->spriteFrameByName(frameName.c_str());
+    if (!frame) return;
+
+    setTextureForMesh(meshName, frame->getTexture());
+    
+    frame->retain();
+    m_customFrames[meshName] = frame;
 }
 
 void SkeletonPlayer::loadFromGLTF(const std::shared_ptr<tinygltf::Model>& model) {
@@ -550,6 +572,11 @@ void SkeletonPlayer::applySkinning() {
             nodeGlobalMat = m_boneNodes[sub.nodeIndex]->getGlobalMatrix();
         }
 
+        CCSpriteFrame* frame = nullptr;
+        if (m_customFrames.count(sub.nodeName)) {
+            frame = m_customFrames[sub.nodeName];
+        }
+
         for (size_t i = 0; i < sub.basePositions.size(); ++i) {
             Vec3 base = sub.basePositions[i];
             Vec3 finalPos = Vec3::zero();
@@ -575,7 +602,23 @@ void SkeletonPlayer::applySkinning() {
             }
 
             sub.renderVertices[i].pos = finalPos * GLB_PIXEL_SCALE;
-            sub.renderVertices[i].uv = sub.uvs[i];
+
+            if (frame) {
+                CCRect rect = frame->getRectInPixels();
+                CCSize texSize = frame->getTexture()->getContentSizeInPixels();
+                Vec2 origUV = sub.uvs[i];
+
+                if (!frame->isRotated()) {
+                    sub.renderVertices[i].uv.x = (rect.origin.x + origUV.x * rect.size.width) / texSize.width;
+                    sub.renderVertices[i].uv.y = (rect.origin.y + (1.0f - origUV.y) * rect.size.height) / texSize.height;
+                } else {
+                    // Handle rotated sprites in spritesheet (usually 90 deg clockwise)
+                    sub.renderVertices[i].uv.x = (rect.origin.x + (1.0f - origUV.y) * rect.size.width) / texSize.width;
+                    sub.renderVertices[i].uv.y = (rect.origin.y + origUV.x * rect.size.height) / texSize.height;
+                }
+            } else {
+                sub.renderVertices[i].uv = sub.uvs[i];
+            }
             
             sub.renderVertices[i].color = {
                 this->getColor().r / 255.f, 

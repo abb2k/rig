@@ -8,12 +8,12 @@ using namespace geode::prelude;
 
 namespace tinygltf { class Model; }
 
-struct ModelLoadResult {
+struct RIG_DLL ModelLoadResult {
     std::shared_ptr<tinygltf::Model> model;
     std::string warning;
 };
 
-class ModelLoader {
+class RIG_DLL ModelLoader {
 private:
 
     static std::map<std::filesystem::path, std::shared_ptr<tinygltf::Model>> m_cachedModels;

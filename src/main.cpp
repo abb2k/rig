@@ -44,7 +44,7 @@ class $modify(MyMenuLayer, MenuLayer) {
 
                 auto pick = pickOpt.unwrap().value();
 
-                auto modelRes = ModelLoader::loadModel(pick);
+                auto modelRes = ModelLoader::loadModel(std::string("testArmglb.glb"_spr));
                 if (modelRes.isErr()){
                     log::error("{}", modelRes.unwrapErr());
                     return;
@@ -55,6 +55,8 @@ class $modify(MyMenuLayer, MenuLayer) {
                 auto skeleton = SkeletonPlayer::create();
                 skeleton->setID("active-skeleton");
                 skeleton->loadFromGLTF(model.model);
+
+                skeleton->setSpriteForMesh("tail", "GJ_moveBtn.png");
                 
                 auto winSize = CCDirector::sharedDirector()->getWinSize();
                 skeleton->setPosition(CCPoint(winSize.width / 2, winSize.height / 2 - 50.f)); 

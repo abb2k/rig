@@ -9,7 +9,7 @@ using namespace geode::prelude;
 
 namespace tinygltf { class Model; }
 
-class SkeletonPlayer : public CCNode, public CCRGBAProtocol {
+class RIG_DLL SkeletonPlayer : public CCNode, public CCRGBAProtocol {
 private:
     std::shared_ptr<tinygltf::Model> m_model;
     bool m_loaded = false;
@@ -26,6 +26,7 @@ private:
 
     std::map<int, CCTexture2D*> m_embeddedTextures;
     std::map<std::string, CCTexture2D*> m_customTextures;
+    std::map<std::string, CCSpriteFrame*> m_customFrames;
 
     std::vector<Track> m_tracks;
 
@@ -87,6 +88,8 @@ public:
     void togglePause();
 
     void setTextureForMesh(const std::string& meshName, CCTexture2D* tex);
+    void setSpriteForMesh(const std::string& meshName, const std::string& spriteName);
+    void setSpriteForMeshWithFrameName(const std::string& meshName, const std::string& frameName);
 
     void loadFromGLTF(const std::shared_ptr<tinygltf::Model>& model);
 

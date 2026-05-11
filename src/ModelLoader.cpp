@@ -32,6 +32,22 @@ Result<ModelLoadResult> ModelLoader::loadModel(const std::filesystem::path& path
     });
 }
 
-Result<ModelLoadResult> ModelLoader::loadModel(const std::string& resourcePath, bool overrideCache = false){
-    
+Result<ModelLoadResult> ModelLoader::loadModel(const std::string& resourcePath, bool overrideCache){
+    std::filesystem::path path = resourcePath;
+
+    if (std::filesystem::exists(dirs::getResourcesDir() / path)){
+        return loadModel(dirs::getResourcesDir() / path, overrideCache);
+    }
+
+    if (!path.empty()){
+        auto firstDir = *path.begin();
+
+        path = dirs::getModRuntimeDir() / firstDir / "resources" / path;
+
+        if (std::filesystem::exists(path)){
+            return loadModel(path, overrideCache);
+        }
+    }
+
+    return Err("Resource path invalid!");
 }
