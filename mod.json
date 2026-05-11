@@ -21,7 +21,7 @@
 	},
 	"api": {
 		"include": [
-			"src/*.hpp"
+			"include/*.hpp"
 		]
 	},
 	"resources": {

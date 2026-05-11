@@ -2,10 +2,11 @@
 
 #include <Geode/Geode.hpp>
 
-#include <tiny_gltf.h>
-#include <Types.hpp>
+#include "Types.hpp"
 
 using namespace geode::prelude;
+
+namespace tinygltf { class Model; }
 
 struct ModelLoadResult {
     std::shared_ptr<tinygltf::Model> model;
@@ -22,4 +23,5 @@ private:
 public:
 
     static Result<ModelLoadResult> loadModel(const std::filesystem::path& path, bool overrideCache = false);
+    static Result<ModelLoadResult> loadModel(const std::string& resourcePath, bool overrideCache = false);
 };

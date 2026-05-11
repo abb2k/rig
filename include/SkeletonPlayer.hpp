@@ -2,12 +2,12 @@
 
 #include <Geode/Geode.hpp>
 
-#include <tiny_gltf.h>
-
-#include <Types.hpp>
-#include <BoneNode.hpp>
+#include "Types.hpp"
+#include "BoneNode.hpp"
 
 using namespace geode::prelude;
+
+namespace tinygltf { class Model; }
 
 class SkeletonPlayer : public CCNode, public CCRGBAProtocol {
 private:

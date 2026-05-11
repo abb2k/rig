@@ -1,4 +1,5 @@
 #include <ModelLoader.hpp>
+#include <tiny_gltf.h>
 
 std::map<std::filesystem::path, std::shared_ptr<tinygltf::Model>> ModelLoader::m_cachedModels{};
 
@@ -29,4 +30,8 @@ Result<ModelLoadResult> ModelLoader::loadModel(const std::filesystem::path& path
         .model = std::make_shared<tinygltf::Model>(model),
         .warning = warn
     });
+}
+
+Result<ModelLoadResult> ModelLoader::loadModel(const std::string& resourcePath, bool overrideCache = false){
+    
 }
