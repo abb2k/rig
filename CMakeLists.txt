@@ -1,14 +1,11 @@
 cmake_minimum_required(VERSION 3.21)
-
-set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
 if ("${CMAKE_SYSTEM_NAME}" STREQUAL "iOS" OR IOS)
     set(CMAKE_OSX_ARCHITECTURES "arm64")
 else()
     set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64")
 endif()
-
 set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 
 project(rig VERSION 1.0.0)
@@ -24,19 +21,19 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(tinygltf)
 
 file(GLOB_RECURSE SOURCES src/*.cpp)
-
 add_library(${PROJECT_NAME} SHARED ${SOURCES})
 
 target_include_directories(${PROJECT_NAME} PRIVATE
     ${tinygltf_SOURCE_DIR}
 )
 
-if (NOT DEFINED ENV{GEODE_SDK})
+if(NOT DEFINED ENV{GEODE_SDK})
     message(FATAL_ERROR "Unable to find Geode SDK! Please define GEODE_SDK environment variable to point to Geode")
 else()
     message(STATUS "Found Geode: $ENV{GEODE_SDK}")
 endif()
 
+include_directories("${CMAKE_CURRENT_SOURCE_DIR}/src")
 add_subdirectory($ENV{GEODE_SDK} ${CMAKE_CURRENT_BINARY_DIR}/geode)
 
 setup_geode_mod(${PROJECT_NAME})

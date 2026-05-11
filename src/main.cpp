@@ -1,38 +1,13 @@
 #include <Geode/Geode.hpp>
 
-#include <unordered_set>
-#include <cmath>
-#include <vector>
-#include <map>
-#include <string>
+#include <SkeletonPlayer.hpp>
+#include <ModelLoader.hpp>
+
 #include <Geode/modify/MenuLayer.hpp>
-
-// DevTools Headers
-
+#include <geode.devtools/include/API.hpp>
 
 using namespace geode::prelude;
 
-// Change this to scale your model up or down. 
-// 100.0f means 1 Blender Meter = 100 Geometry Dash Pixels.
-
-
-// ==========================================
-// 1. MINI MATH ENGINE
-// ==========================================
-
-
-// ==========================================
-// 2. PHYSICAL BONE NODE
-// ==========================================
-
-
-// ==========================================
-// 3. SKELETON PLAYER CLASS
-// ==========================================
-
-// ==========================================
-// 4. YOUR MENU LAYER MODIFICATION
-// ==========================================
 class $modify(MyMenuLayer, MenuLayer) {
     bool init() {
         if (!MenuLayer::init()) return false;
@@ -68,24 +43,18 @@ class $modify(MyMenuLayer, MenuLayer) {
                 if (pickOpt.isErr() || !pickOpt.unwrap().has_value()) return;
 
                 auto pick = pickOpt.unwrap().value();
-                tinygltf::TinyGLTF loader;
-                tinygltf::Model model;
-                std::string err, warn;
 
-                bool success = loader.LoadBinaryFromFile(&model, &err, &warn, utils::string::pathToString(pick));
-
-                if (!success) {
-                    log::error("Failed to load GLB: {}", err);
+                auto modelRes = ModelLoader::loadModel(pick);
+                if (modelRes.isErr()){
+                    log::error("{}", modelRes.unwrapErr());
                     return;
                 }
 
-                if (auto old = this->getChildByID("active-skeleton")) {
-                    old->removeFromParent();
-                }
+                auto model = modelRes.unwrap();
 
                 auto skeleton = SkeletonPlayer::create();
                 skeleton->setID("active-skeleton");
-                skeleton->loadFromGLTF(model);
+                skeleton->loadFromGLTF(model.model);
                 
                 auto winSize = CCDirector::sharedDirector()->getWinSize();
                 skeleton->setPosition(CCPoint(winSize.width / 2, winSize.height / 2 - 50.f)); 
