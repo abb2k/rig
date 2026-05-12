@@ -5,13 +5,13 @@
 using namespace geode::prelude;
 
 #ifdef GEODE_IS_WINDOWS
-    #ifdef rig_EXPORTS
+    #if defined(RIG_EXPORTING) || defined(rig_EXPORTS)
         #define RIG_DLL __declspec(dllexport)
     #else
         #define RIG_DLL __declspec(dllimport)
     #endif
 #else
-    #define RIG_DLL GEODE_DLL
+    #define RIG_DLL __attribute__((visibility("default")))
 #endif
 
 #define GLB_PIXEL_SCALE 100.0f
@@ -32,7 +32,7 @@ using namespace geode::prelude;
 #define GLB_ANIM_INTERPOLATION_HERMITE "HERMITE"
 #define GLB_ANIM_INTERPOLATION_BEZIER "BEZIER"
 
-struct RIG_DLL Vec2 {
+struct Vec2 {
     float x;
     float y;
 
@@ -43,7 +43,7 @@ struct RIG_DLL Vec2 {
     Vec2& operator*=(float s);
 };
 
-struct RIG_DLL Vec3 {
+struct Vec3 {
     float x;
     float y;
     float z;
@@ -60,7 +60,7 @@ struct RIG_DLL Vec3 {
     static Vec3 lerp(const Vec3& a, const Vec3& b, float t);
 };
 
-struct RIG_DLL Vec4 {
+struct Vec4 {
     float x;
     float y;
     float z;
@@ -73,7 +73,7 @@ struct RIG_DLL Vec4 {
     Vec4& operator*=(float s);
 };
 
-struct RIG_DLL Quat { 
+struct Quat { 
     float x;
     float y;
     float z;
@@ -94,7 +94,7 @@ struct RIG_DLL Quat {
     static Quat nlerp(const Quat& a, const Quat& b, float t);
 };
 
-struct RIG_DLL Mat4 {
+struct Mat4 {
     float m[16];
 
     Mat4();

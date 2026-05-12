@@ -8,7 +8,7 @@ using namespace geode::prelude;
 
 namespace tinygltf { class Model; }
 
-struct RIG_DLL ModelLoadResult {
+struct ModelLoadResult {
     std::shared_ptr<tinygltf::Model> model;
     std::string warning;
 };
