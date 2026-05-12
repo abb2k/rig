@@ -21,7 +21,9 @@
 	},
 	"api": {
 		"include": [
-			"include/*.hpp"
+			"include/*.hpp",
+			"include/rig/ext/*.h",
+			"include/rig/ext/*.hpp"
 		]
 	},
 	"resources": {
