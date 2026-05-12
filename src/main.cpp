@@ -29,6 +29,13 @@ class $modify(MyMenuLayer, MenuLayer) {
         );
         menu->addChild(pauseBtn);
 
+        auto yeahBtn = CCMenuItemSpriteExtra::create(
+            ButtonSprite::create("yeah"),
+            this,
+            menu_selector(MyMenuLayer::onYeah)
+        );
+        menu->addChild(yeahBtn);
+
         menu->updateLayout();
         return true;
     }
@@ -44,7 +51,7 @@ class $modify(MyMenuLayer, MenuLayer) {
 
                 auto pick = pickOpt.unwrap().value();
 
-                auto modelRes = ModelLoader::loadModel(std::string("testArmglb.glb"_spr));
+                auto modelRes = ModelLoader::loadModel(pick);
                 if (modelRes.isErr()){
                     log::error("{}", modelRes.unwrapErr());
                     return;
@@ -57,6 +64,8 @@ class $modify(MyMenuLayer, MenuLayer) {
                 skeleton->loadFromGLTF(model.model);
 
                 skeleton->setSpriteForMesh("tail", "GJ_moveBtn.png");
+
+                skeleton->playAnimation("walking");
                 
                 auto winSize = CCDirector::sharedDirector()->getWinSize();
                 skeleton->setPosition(CCPoint(winSize.width / 2, winSize.height / 2 - 50.f)); 
@@ -68,7 +77,12 @@ class $modify(MyMenuLayer, MenuLayer) {
 
     void onTogglePause(CCObject*) {
         auto skeleton = static_cast<SkeletonPlayer*>(this->getChildByID("active-skeleton"));
-        if (skeleton) skeleton->togglePause();
+        skeleton->playAnimation("walking", 1.0f);
+    }
+
+    void onYeah(CCObject*) {
+        auto skeleton = static_cast<SkeletonPlayer*>(this->getChildByID("active-skeleton"));
+        skeleton->playAnimation("wave", 1.0f);
     }
 };
 

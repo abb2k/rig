@@ -17,6 +17,16 @@ private:
     float m_time = 0.f;
     float m_maxAnimTime = 0.f;
 
+    std::map<std::string, Animation> m_animations;
+    std::string m_currentAnimName = "";
+    std::string m_prevAnimName = "";
+    
+    float m_blendingWeight = 1.0f;
+    float m_blendingDuration = 0.0f;
+    float m_blendingTimer = 0.0f;
+    
+    float m_prevAnimTime = 0.f;
+
     std::map<int, BoneNode*> m_boneNodes;
 
     std::vector<SubMesh> m_subMeshes;
@@ -54,6 +64,8 @@ private:
     virtual void onExit() override;
 
     void extractFloatData(int accessorIndex, int expectedComponents, bool isWeight, std::function<void(const std::vector<float>&)> callback);
+
+    std::vector<float> sampleTrack(const Track& track, float time);
 
 public:
     static SkeletonPlayer* create();
@@ -101,4 +113,7 @@ public:
     void update(float dt) override;
 
     void draw() override;
+
+    void playAnimation(const std::string& name, float blendTime = 0);
+    std::vector<std::string> getAnimationNames();
 };

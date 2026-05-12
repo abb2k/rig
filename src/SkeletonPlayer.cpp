@@ -146,17 +146,77 @@ void SkeletonPlayer::loadFromGLTF(const std::shared_ptr<tinygltf::Model>& model)
 }
 
 void SkeletonPlayer::update(float dt) {
-    if (!m_loaded) return;
+    if (!m_loaded || m_paused) return;
 
-    if (!m_paused) {
-        m_time += dt;
-        if (m_maxAnimTime > 0 && m_time > m_maxAnimTime) {
-            m_time = fmod(m_time, m_maxAnimTime);
+    if (m_blendingWeight < 1.0f && m_blendingDuration > 0.0f) {
+        m_blendingTimer += dt;
+        m_blendingWeight = std::min(1.0f, m_blendingTimer / m_blendingDuration);
+        
+        if (m_blendingWeight >= 1.0f) {
+            m_prevAnimName = "";
         }
-        applyAnimations(m_time);
     }
 
-    for (auto& [id, bone] : m_boneNodes) bone->syncFromCCNode();
+    if (m_animations.count(m_currentAnimName)) {
+        float duration = m_animations[m_currentAnimName].duration;
+        m_time += dt;
+        if (duration > 0) m_time = fmod(m_time, duration);
+    }
+
+    if (m_blendingWeight < 1.0f && m_animations.count(m_prevAnimName)) {
+        float prevDuration = m_animations[m_prevAnimName].duration;
+        m_prevAnimTime += dt;
+        if (prevDuration > 0) m_prevAnimTime = fmod(m_prevAnimTime, prevDuration);
+    }
+
+    if (m_animations.count(m_currentAnimName)) {
+        auto& currentAnim = m_animations[m_currentAnimName];
+        
+        bool isBlending = (m_blendingWeight < 1.0f && m_animations.count(m_prevAnimName));
+        
+        for (auto& [nodeIdx, bone] : m_boneNodes) {
+            Vec3 finalT = bone->getLocalTranslation();
+            Quat finalR = bone->getLocalRotation();
+            Vec3 finalS = bone->getLocalScale();
+
+            auto getAnimTRS = [&](const Animation& anim, float animTime, Vec3& outT, Quat& outR, Vec3& outS) {
+                for (auto& track : anim.tracks) {
+                    if (track.targetNode != nodeIdx) continue;
+                    
+                    auto val = sampleTrack(track, animTime); 
+                    if (val.empty()) continue;
+
+                    if (track.path == GLB_ANIM_PATH_TRANSLATION) outT = {val[0], val[1], val[2]};
+                    else if (track.path == GLB_ANIM_PATH_ROTATION) outR = {val[0], val[1], val[2], val[3]};
+                    else if (track.path == GLB_ANIM_PATH_SCALE) outS = {val[0], val[1], val[2]};
+                }
+            };
+
+            if (isBlending) {
+                Vec3 transform1 = finalT;
+                Vec3 transform2 = finalT;
+                Quat rotation1 = finalR;
+                Quat rotation2 = finalR;
+                Vec3 scale1 = finalS;
+                Vec3 scale2 = finalS;
+
+                getAnimTRS(m_animations[m_prevAnimName], m_prevAnimTime, transform1, rotation1, scale1);
+                getAnimTRS(currentAnim, m_time, transform2, rotation2, scale2);
+
+                finalT = Vec3::lerp(transform1, transform2, m_blendingWeight);
+                finalR = Quat::nlerp(rotation1, rotation2, m_blendingWeight);
+                finalS = Vec3::lerp(scale1, scale2, m_blendingWeight);
+            } else {
+                getAnimTRS(currentAnim, m_time, finalT, finalR, finalS);
+            }
+
+            bone->updateFromGLTF(finalT, finalR, finalS);
+        }
+    }
+
+    for (auto& [id, bone] : m_boneNodes) {
+        bone->syncFromCCNode();
+    }
 
     int sceneIndex = m_model->defaultScene > -1 ? m_model->defaultScene : 0;
     for (int root : m_model->scenes[sceneIndex].nodes) {
@@ -421,45 +481,32 @@ void SkeletonPlayer::buildBoneNodes() {
 }
 
 void SkeletonPlayer::extractAnimations() {
-    m_tracks.clear();
-    m_maxAnimTime = 0.f;
+    m_animations.clear();
+    if (m_model->animations.empty()) return;
 
-    if (m_model->animations.empty()) {
-        log::warn("No animations found in this GLB file!");
-        return;
-    }
+    for (auto& gltfAnim : m_model->animations) {
+        Animation anim;
+        anim.name = gltfAnim.name.empty() ? fmt::format("anim_{}", m_animations.size()) : gltfAnim.name;
+        
+        for (auto& channel : gltfAnim.channels) {
+            auto& sampler = gltfAnim.samplers[channel.sampler];
+            Track track;
+            track.targetNode = channel.target_node;
+            track.path = channel.target_path;
+            track.interpolation = sampler.interpolation;
 
+            extractFloatData(sampler.input, 1, false, [&](const std::vector<float>& vals) {
+                track.times.push_back(vals[0]);
+                if (vals[0] > anim.duration) anim.duration = vals[0];
+            });
 
-    const tinygltf::Animation* activeAnim = nullptr;
-
-    for (auto& anim : m_model->animations) {
-        if (anim.channels.empty()) continue;
-
-        activeAnim = &anim;
-        break;
-    }
-
-    if (!activeAnim) return;
-
-    for (auto& channel : activeAnim->channels) {
-        auto& sampler = activeAnim->samplers[channel.sampler];
-        Track track; 
-        track.targetNode = channel.target_node; 
-        track.path = channel.target_path;
-        track.interpolation = sampler.interpolation;
-
-        extractFloatData(sampler.input, 1, false, [&](const std::vector<float>& vals) {
-            track.times.push_back(vals[0]);
-            if (vals[0] > m_maxAnimTime)
-                m_maxAnimTime = vals[0];
-        });
-
-        int numComponents = (track.path == GLB_ANIM_PATH_ROTATION) ? 4 : 3;
-        extractFloatData(sampler.output, numComponents, false, [&](const std::vector<float>& vals) {
-            track.values.push_back(vals);
-        });
-
-        m_tracks.push_back(track);
+            int numComp = (track.path == GLB_ANIM_PATH_ROTATION) ? 4 : 3;
+            extractFloatData(sampler.output, numComp, false, [&](const std::vector<float>& vals) {
+                track.values.push_back(vals);
+            });
+            anim.tracks.push_back(track);
+        }
+        m_animations[anim.name] = anim;
     }
 }
 
@@ -481,7 +528,8 @@ void SkeletonPlayer::applyAnimations(float time) {
 
                 frame = i; 
                 nextFrame = i + 1;
-                float t0 = track.times[frame], t1 = track.times[nextFrame];
+                float t0 = track.times[frame];
+                float t1 = track.times[nextFrame];
                 factor = (time - t0) / (t1 - t0);
                 break; 
             }
@@ -687,3 +735,63 @@ std::vector<BoneNode*> SkeletonPlayer::getBoneNodes() {
     }
     return ret;
 }
+
+std::vector<float> SkeletonPlayer::sampleTrack(const Track& track, float time) {
+    if (track.times.empty()) return {};
+    
+    int frame = 0;
+    int nextFrame = 0;
+    float factor = 0.f;
+
+    if (time >= track.times.back()) {
+        frame = track.times.size() - 1;
+        nextFrame = frame;
+    } else {
+        for (size_t i = 0; i < track.times.size() - 1; ++i) {
+            if (time < track.times[i] || time >= track.times[i + 1]) continue;
+
+            frame = i;
+            nextFrame = i + 1;
+            factor = (time - track.times[frame]) / (track.times[nextFrame] - track.times[frame]);
+
+            break;
+        }
+    }
+
+    int vIdx0 = (track.interpolation == GLB_ANIM_INTERPOLATION_CUBICSPLINE) ? frame * 3 + 1 : frame;
+    int vIdx1 = (track.interpolation == GLB_ANIM_INTERPOLATION_CUBICSPLINE) ? nextFrame * 3 + 1 : nextFrame;
+    
+    std::vector<float> result(track.values[vIdx0].size());
+    for(size_t i=0; i < result.size(); ++i) {
+        result[i] = track.values[vIdx0][i] + (track.values[vIdx1][i] - track.values[vIdx0][i]) * factor;
+    }
+    return result;
+}
+
+void SkeletonPlayer::playAnimation(const std::string& name, float blendTime) {
+    if (m_animations.find(name) == m_animations.end() || m_currentAnimName == name) return;
+
+    if (blendTime <= 0.0f) {
+        m_currentAnimName = name;
+        m_time = 0.0f;
+        m_blendingWeight = 1.0f;
+    } else {
+        m_prevAnimName = m_currentAnimName;
+        m_prevAnimTime = m_time;
+        m_currentAnimName = name;
+        m_time = 0.0f;
+        m_blendingTimer = 0.0f;
+        m_blendingDuration = blendTime;
+        m_blendingWeight = 0.0f; 
+    }
+}
+
+ std::vector<std::string> SkeletonPlayer::getAnimationNames(){
+    std::vector<std::string> ret{};
+    for (const auto& anim : m_animations)
+    {
+        ret.push_back(anim.first);
+    }
+    
+    return ret;
+ }

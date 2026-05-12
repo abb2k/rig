@@ -134,3 +134,9 @@ struct Track {
     std::string path;
     std::string interpolation;
 };
+
+struct Animation {
+    std::string name;
+    std::vector<Track> tracks;
+    float duration = 0.f;
+};
