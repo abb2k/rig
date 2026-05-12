@@ -238,7 +238,7 @@ void SkeletonPlayer::draw() {
     shader->use();
     shader->setUniformsForBuiltins();
 
-    ccGLBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    ccGLBlendFunc(CC_BLEND_SRC, CC_BLEND_DST);
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
@@ -263,7 +263,7 @@ void SkeletonPlayer::draw() {
     }
 
     std::sort(depthSortedMeshes.begin(), depthSortedMeshes.end(), [](const std::pair<int, float>& a, const std::pair<int, float>& b) {
-        return a.second < b.second; 
+        return a.second < b.second;
     });
 
     for (auto& [id, _] : depthSortedMeshes) {
@@ -285,9 +285,9 @@ void SkeletonPlayer::draw() {
         if (activeTex) {
             ccGLBindTexture2D(activeTex->getName());
 
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-            
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         } else {
