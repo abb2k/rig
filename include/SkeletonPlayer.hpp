@@ -50,6 +50,9 @@ private:
 
     void applySkinning();
 
+    virtual void onEnter() override;
+    virtual void onExit() override;
+
     void extractFloatData(int accessorIndex, int expectedComponents, bool isWeight, std::function<void(const std::vector<float>&)> callback);
 
 public:

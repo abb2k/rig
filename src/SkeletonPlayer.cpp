@@ -18,8 +18,17 @@ SkeletonPlayer* SkeletonPlayer::create() {
 bool SkeletonPlayer::init() {
     if (!CCNode::init()) return false;
     this->setShaderProgram(CCShaderCache::sharedShaderCache()->programForKey(kCCShader_PositionTextureColor));
-    this->scheduleUpdate();
     return true;
+}
+
+void SkeletonPlayer::onEnter() {
+    CCNode::onEnter();
+    this->scheduleUpdate();
+}
+
+void SkeletonPlayer::onExit() {
+    CCNode::onExit();
+    this->unscheduleUpdate();
 }
 
 SkeletonPlayer::~SkeletonPlayer() {
@@ -346,7 +355,6 @@ void SkeletonPlayer::extractMeshes() {
 void SkeletonPlayer::buildBoneNodes() {
     m_boneNodes.clear();
     
-    // Create a set of "Deform" nodes if a skin exists
     std::unordered_set<int> skeletonNodes;
     if (!m_model->skins.empty()) {
         for (int jointIdx : m_model->skins[0].joints) {
@@ -612,7 +620,6 @@ void SkeletonPlayer::applySkinning() {
                     sub.renderVertices[i].uv.x = (rect.origin.x + origUV.x * rect.size.width) / texSize.width;
                     sub.renderVertices[i].uv.y = (rect.origin.y + (1.0f - origUV.y) * rect.size.height) / texSize.height;
                 } else {
-                    // Handle rotated sprites in spritesheet (usually 90 deg clockwise)
                     sub.renderVertices[i].uv.x = (rect.origin.x + (1.0f - origUV.y) * rect.size.width) / texSize.width;
                     sub.renderVertices[i].uv.y = (rect.origin.y + origUV.x * rect.size.height) / texSize.height;
                 }
