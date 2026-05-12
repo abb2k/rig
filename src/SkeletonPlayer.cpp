@@ -672,3 +672,11 @@ void SkeletonPlayer::extractFloatData(int accessorIndex, int expectedComponents,
         callback(vals);
     }
 }
+
+std::vector<BoneNode*> SkeletonPlayer::getBoneNodes() {
+    std::vector<BoneNode*> ret;
+    for (auto& [id, bone] : m_boneNodes) {
+        ret.push_back(bone);
+    }
+    return ret;
+}

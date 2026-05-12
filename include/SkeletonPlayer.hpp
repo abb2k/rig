@@ -85,6 +85,8 @@ public:
  
     virtual void updateDisplayedOpacity(GLubyte opacity) override;
 
+    std::vector<BoneNode*> getBoneNodes();
+
     void togglePause();
 
     void setTextureForMesh(const std::string& meshName, CCTexture2D* tex);
