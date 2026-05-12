@@ -148,8 +148,10 @@ void SkeletonPlayer::loadFromGLTF(const std::shared_ptr<tinygltf::Model>& model)
 void SkeletonPlayer::update(float dt) {
     if (!m_loaded || m_paused) return;
 
+    float scaledDT = dt * m_animSpeedModifier;
+
     if (m_blendingWeight < 1.0f && m_blendingDuration > 0.0f) {
-        m_blendingTimer += dt;
+        m_blendingTimer += scaledDT;
         m_blendingWeight = std::min(1.0f, m_blendingTimer / m_blendingDuration);
         
         if (m_blendingWeight >= 1.0f) {
@@ -159,13 +161,13 @@ void SkeletonPlayer::update(float dt) {
 
     if (m_animations.count(m_currentAnimName)) {
         float duration = m_animations[m_currentAnimName].duration;
-        m_time += dt;
+        m_time += scaledDT;
         if (duration > 0) m_time = fmod(m_time, duration);
     }
 
     if (m_blendingWeight < 1.0f && m_animations.count(m_prevAnimName)) {
         float prevDuration = m_animations[m_prevAnimName].duration;
-        m_prevAnimTime += dt;
+        m_prevAnimTime += scaledDT;
         if (prevDuration > 0) m_prevAnimTime = fmod(m_prevAnimTime, prevDuration);
     }
 
@@ -762,7 +764,7 @@ std::vector<float> SkeletonPlayer::sampleTrack(const Track& track, float time) {
     int vIdx1 = (track.interpolation == GLB_ANIM_INTERPOLATION_CUBICSPLINE) ? nextFrame * 3 + 1 : nextFrame;
     
     std::vector<float> result(track.values[vIdx0].size());
-    for(size_t i=0; i < result.size(); ++i) {
+    for(size_t i = 0; i < result.size(); ++i) {
         result[i] = track.values[vIdx0][i] + (track.values[vIdx1][i] - track.values[vIdx0][i]) * factor;
     }
     return result;
@@ -794,4 +796,8 @@ void SkeletonPlayer::playAnimation(const std::string& name, float blendTime) {
     }
     
     return ret;
+ }
+
+ void SkeletonPlayer::setAnimSpeedMultiplier(float multiplier){
+    m_animSpeedModifier = multiplier;
  }

@@ -27,6 +27,8 @@ private:
     
     float m_prevAnimTime = 0.f;
 
+    float m_animSpeedModifier = 1;
+
     std::map<int, BoneNode*> m_boneNodes;
 
     std::vector<SubMesh> m_subMeshes;
@@ -116,4 +118,9 @@ public:
 
     void playAnimation(const std::string& name, float blendTime = 0);
     std::vector<std::string> getAnimationNames();
+
+    std::shared_ptr<tinygltf::Model> getModel() const { return m_model; }
+
+    void setAnimSpeedMultiplier(float multiplier);
+    float getAnimSpeedMultiplier() const { return m_animSpeedModifier; }
 };
