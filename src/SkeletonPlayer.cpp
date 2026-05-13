@@ -238,7 +238,7 @@ void SkeletonPlayer::draw() {
     shader->use();
     shader->setUniformsForBuiltins();
 
-    ccGLBlendFunc(CC_BLEND_SRC, CC_BLEND_DST);
+    ccGLBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
