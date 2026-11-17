@@ -1,6 +1,6 @@
 #include <BoneNode.hpp>
 
-#include <geode.devtools/include/API.hpp>
+#include <geode.devtools/API.hpp>
 
 BoneNode* BoneNode::create(int gltfIndex, const std::string& name) {
     auto ret = new BoneNode();

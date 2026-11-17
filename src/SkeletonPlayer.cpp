@@ -1,9 +1,8 @@
-#define TINYGLTF_IMPLEMENTATION
-#define STB_IMAGE_IMPLEMENTATION
-#define STB_IMAGE_WRITE_IMPLEMENTATION
-#include <tiny_gltf.h>
-
+#include <ModelLoader.hpp>
 #include <SkeletonPlayer.hpp>
+
+#include <ModelUtils.hpp>
+#include <bit>
 
 SkeletonPlayer* SkeletonPlayer::create() {
     auto ret = new SkeletonPlayer();
@@ -96,7 +95,7 @@ void SkeletonPlayer::togglePause() {
 }
 
 void SkeletonPlayer::setTextureForMesh(const std::string& meshName, CCTexture2D* tex) {
-    if (m_customTextures.count(meshName)){
+    if (m_customTextures.count(meshName)) {
         CC_SAFE_RELEASE(m_customTextures[meshName]);
     }
 
@@ -105,7 +104,7 @@ void SkeletonPlayer::setTextureForMesh(const std::string& meshName, CCTexture2D*
         m_customFrames.erase(meshName);
     }
 
-    if (tex){
+    if (tex) {
         tex->retain();
     }
 
@@ -128,7 +127,7 @@ void SkeletonPlayer::setSpriteForMeshWithFrameName(const std::string& meshName, 
     m_customFrames[meshName] = frame;
 }
 
-void SkeletonPlayer::loadFromGLTF(const std::shared_ptr<tinygltf::Model>& model) {
+void SkeletonPlayer::loadFromGLTF(const std::shared_ptr<RigGLTFModel>& model) {
     m_model = model;
     m_loaded = false;
     
@@ -177,9 +176,9 @@ void SkeletonPlayer::update(float dt) {
         bool isBlending = (m_blendingWeight < 1.0f && m_animations.count(m_prevAnimName));
         
         for (auto& [nodeIdx, bone] : m_boneNodes) {
-            Vec3 finalT = bone->getLocalTranslation();
-            Quat finalR = bone->getLocalRotation();
-            Vec3 finalS = bone->getLocalScale();
+            auto finalPos = bone->getLocalTranslation();
+            auto finalRotation = bone->getLocalRotation();
+            auto finalScale = bone->getLocalScale();
 
             auto getAnimTRS = [&](const Animation& anim, float animTime, Vec3& outT, Quat& outR, Vec3& outS) {
                 for (auto& track : anim.tracks) {
@@ -195,24 +194,24 @@ void SkeletonPlayer::update(float dt) {
             };
 
             if (isBlending) {
-                Vec3 transform1 = finalT;
-                Vec3 transform2 = finalT;
-                Quat rotation1 = finalR;
-                Quat rotation2 = finalR;
-                Vec3 scale1 = finalS;
-                Vec3 scale2 = finalS;
+                Vec3 transform1 = finalPos;
+                Vec3 transform2 = finalPos;
+                Quat rotation1 = finalRotation;
+                Quat rotation2 = finalRotation;
+                Vec3 scale1 = finalScale;
+                Vec3 scale2 = finalScale;
 
                 getAnimTRS(m_animations[m_prevAnimName], m_prevAnimTime, transform1, rotation1, scale1);
                 getAnimTRS(currentAnim, m_time, transform2, rotation2, scale2);
 
-                finalT = Vec3::lerp(transform1, transform2, m_blendingWeight);
-                finalR = Quat::nlerp(rotation1, rotation2, m_blendingWeight);
-                finalS = Vec3::lerp(scale1, scale2, m_blendingWeight);
+                finalPos = Vec3::lerp(transform1, transform2, m_blendingWeight);
+                finalRotation = Quat::nlerp(rotation1, rotation2, m_blendingWeight);
+                finalScale = Vec3::lerp(scale1, scale2, m_blendingWeight);
             } else {
-                getAnimTRS(currentAnim, m_time, finalT, finalR, finalS);
+                getAnimTRS(currentAnim, m_time, finalPos, finalRotation, finalScale);
             }
 
-            bone->updateFromGLTF(finalT, finalR, finalS);
+            bone->updateFromGLTF(finalPos, finalRotation, finalScale);
         }
     }
 
@@ -220,9 +219,13 @@ void SkeletonPlayer::update(float dt) {
         bone->syncFromCCNode();
     }
 
-    int sceneIndex = m_model->defaultScene > -1 ? m_model->defaultScene : 0;
-    for (int root : m_model->scenes[sceneIndex].nodes) {
-        recalcGlobalMatrices(root, Mat4());
+    int sceneIndex = m_model->default_scene > -1 ? m_model->default_scene : 0;
+    
+    if (sceneIndex >= 0 && static_cast<uint32_t>(sceneIndex) < m_model->scenes_count) {
+        const auto& scene = m_model->scenes[sceneIndex];
+        for (uint32_t i = 0; i < scene.nodes_count; ++i) {
+            recalcGlobalMatrices(scene.nodes[i], Mat4());
+        }
     }
 
     applySkinning();
@@ -301,96 +304,123 @@ void SkeletonPlayer::draw() {
 }
 
 void SkeletonPlayer::loadEmbeddedTextures() {
-    for (size_t i = 0; i < m_model->images.size(); ++i) {
-        auto& img = m_model->images[i];
+    for (auto i = 0; i < m_model->images_count; i++) {
+        auto& data = m_model->imageData[i];
+        if (data.empty() || data.size() > static_cast<size_t>(std::numeric_limits<int>::max())) continue;
 
-        if (img.image.empty()) continue;
+        auto image = new CCImage();
+        if (!image->initWithImageData(data.data(), static_cast<int>(data.size()))) {
+            image->release();
+            continue;
+        }
 
-        CCTexture2D* tex = new CCTexture2D();
+        auto texture = new CCTexture2D();
+        auto pixelFormat = image->hasAlpha() ? kCCTexture2DPixelFormat_RGBA8888 : kCCTexture2DPixelFormat_RGB888;
 
-        tex->initWithData(
-            img.image.data(),
-            (img.component == 3) ? kCCTexture2DPixelFormat_RGB888 : kCCTexture2DPixelFormat_RGBA8888,
-            img.width,
-            img.height,
-            CCSize(
-                img.width,
-                img.height
-            )
-        );
+        if (!texture->initWithData(
+                image->getData(),
+                pixelFormat,
+                image->getWidth(),
+                image->getHeight(),
+                CCSize(image->getWidth(), image->getHeight()))) {
 
-        m_embeddedTextures[i] = tex; 
+            texture->release();
+            image->release();
+            continue;
+        }
+        image->release();
+        m_embeddedTextures[i] = texture;
     }
 }
 
 void SkeletonPlayer::extractMeshes() {
     m_subMeshes.clear();
     
-    for (size_t nIdx = 0; nIdx < m_model->nodes.size(); ++nIdx) {
+    for (auto nIdx = 0; nIdx < m_model->nodes_count; nIdx++) {
         auto& gltfNode = m_model->nodes[nIdx];
         
-        if (gltfNode.mesh < 0 || gltfNode.mesh >= m_model->meshes.size()) continue;
+        if (gltfNode.mesh < 0 || static_cast<uint32_t>(gltfNode.mesh) >= m_model->meshes_count) continue;
 
         auto& gltfMesh = m_model->meshes[gltfNode.mesh];
         
-        for (size_t pIdx = 0; pIdx < gltfMesh.primitives.size(); ++pIdx) {
+        for (uint32_t pIdx = 0; pIdx < gltfMesh.primitives_count; ++pIdx) {
             auto& primitive = gltfMesh.primitives[pIdx];
             SubMesh sub;
             
             sub.nodeIndex = nIdx;
-            sub.nodeName = gltfNode.name;
-            sub.name = gltfMesh.name;
-            if (sub.name.empty()) sub.name = fmt::format("mesh_{}", gltfNode.mesh);
-            if (gltfMesh.primitives.size() > 1) sub.name += fmt::format("_part_{}", pIdx);
+            sub.nodeName = ModelUtils::toString(gltfNode.name);
+            sub.name = ModelUtils::toString(gltfMesh.name);
 
-            if (primitive.material >= 0) {
+            if (sub.name.empty()) sub.name = fmt::format("mesh_{}", gltfNode.mesh);
+            if (gltfMesh.primitives_count > 1) sub.name += fmt::format("_part_{}", pIdx);
+
+            if (primitive.material >= 0 && static_cast<uint32_t>(primitive.material) < m_model->materials_count) {
                 auto& mat = m_model->materials[primitive.material];
-                int texIdx = mat.pbrMetallicRoughness.baseColorTexture.index;
-                if (texIdx >= 0 && texIdx < m_model->textures.size()) sub.embeddedImageIndex = m_model->textures[texIdx].source;
+
+                int texIdx = mat.pbr_metallic_roughness.base_color_texture.index;
+
+                if (texIdx >= 0 && static_cast<uint32_t>(texIdx) < m_model->textures_count) {
+                    sub.embeddedImageIndex = m_model->textures[texIdx].source;
+                }
             }
 
-            extractFloatData(primitive.attributes[GLB_ATTRIBUTE_POSITION], 3, false, [&](const std::vector<float>& vals) {
+            auto position = findAttribute(primitive, GLB_ATTRIBUTE_POSITION);
+            if (!position) continue;
+
+            extractFloatData(position->value, 3, false, [&](const std::vector<float>& vals) {
                 sub.basePositions.push_back({vals[0], vals[1], vals[2]});
             });
 
-            if (primitive.attributes.count(GLB_ATTRIBUTE_UV)) {
-                extractFloatData(primitive.attributes[GLB_ATTRIBUTE_UV], 2, false, [&](const std::vector<float>& vals) {
+            if (auto uv = findAttribute(primitive, GLB_ATTRIBUTE_UV)) {
+                extractFloatData(uv->value, 2, false, [&](const std::vector<float>& vals) {
                     sub.uvs.push_back({vals[0], vals[1]}); 
                 });
             } else {
                 sub.uvs.assign(sub.basePositions.size(), {0,0});
             }
 
-            if (primitive.attributes.count(GLB_ATTRIBUTE_WEIGHTS)) {
-                extractFloatData(primitive.attributes[GLB_ATTRIBUTE_WEIGHTS], 4, true, [&](const std::vector<float>& vals) {
+            if (auto weights = findAttribute(primitive, GLB_ATTRIBUTE_WEIGHTS)) {
+                extractFloatData(weights->value, 4, true, [&](const std::vector<float>& vals) {
                     sub.weights.push_back({vals[0], vals[1], vals[2], vals[3]});
                 });
             }
             
-            if (primitive.attributes.count(GLB_ATTRIBUTE_JOINTS)) {
-                extractFloatData(primitive.attributes[GLB_ATTRIBUTE_JOINTS], 4, false, [&](const std::vector<float>& vals) {
+            if (auto joints = findAttribute(primitive, GLB_ATTRIBUTE_JOINTS)) {
+                extractFloatData(joints->value, 4, false, [&](const std::vector<float>& vals) {
                     sub.joints.push_back({vals[0], vals[1], vals[2], vals[3]});
                 });
             }
 
             if (primitive.indices >= 0) {
                 auto& accessor = m_model->accessors[primitive.indices];
-                auto& bufferView = m_model->bufferViews[accessor.bufferView];
+                auto& bufferView = m_model->buffer_views[accessor.buffer_view];
                 auto& buffer = m_model->buffers[bufferView.buffer];
-                const unsigned char* data = buffer.data.data() + bufferView.byteOffset + accessor.byteOffset;
+                const unsigned char* data = buffer.data.data + bufferView.byte_offset + accessor.byte_offset;
                 
-                int compSize = (accessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT) ? 4 :
-                                (accessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT) ? 2 : 1;
-                int stride = bufferView.byteStride ? bufferView.byteStride : compSize;
+                size_t componentSize = 0;
+                switch (accessor.component_type) {
+                    case TG3_COMPONENT_TYPE_UNSIGNED_BYTE:
+                        componentSize = 1;
+                        break;
+                    case TG3_COMPONENT_TYPE_UNSIGNED_SHORT:
+                        componentSize = 2;
+                        break;
+                    case TG3_COMPONENT_TYPE_UNSIGNED_INT:
+                        componentSize = 4;
+                        break;
+                }
 
-                for (size_t i = 0; i < accessor.count; ++i) {
-                    const unsigned char* ptr = data + (i * stride);
-                    if (accessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT) {
-                        unsigned short idx; memcpy(&idx, ptr, 2); sub.indices.push_back(idx);
-                    } else if (accessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT) {
-                        unsigned int idx; memcpy(&idx, ptr, 4); sub.indices.push_back((unsigned short)idx);
-                    } else if (accessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE) {
-                        unsigned char idx; memcpy(&idx, ptr, 1); sub.indices.push_back((unsigned short)idx);
+                if (componentSize > 0) {
+                    const size_t stride = bufferView.byte_stride ? bufferView.byte_stride : componentSize;
+                    sub.indices.reserve(accessor.count);
+
+                    for (size_t i = 0; i < accessor.count; i++) {
+                        const auto* bytes = data + i * stride;
+                        uint32_t index = 0;
+                        for (size_t byte = 0; byte < componentSize; byte++) {
+                            index |= static_cast<uint32_t>(bytes[byte]) << (byte * 8);
+                        }
+                        sub.indices.push_back(static_cast<unsigned short>(index));
                     }
                 }
             }
@@ -400,12 +430,12 @@ void SkeletonPlayer::extractMeshes() {
         }
     }
 
-    if (!m_model->skins.empty()) {
+    if (m_model->skins_count > 0) {
         auto& skin = m_model->skins[0];
-        extractFloatData(skin.inverseBindMatrices, 16, false, [this](const std::vector<float>& vals) {
+        extractFloatData(skin.inverse_bind_matrices, 16, false, [this](const std::vector<float>& vals) {
             Mat4 mat;
             
-            for(int i = 0; i < 16; i++) {
+            for (int i = 0; i < 16; i++) {
                 mat.m[i] = vals[i];
             }
             
@@ -418,64 +448,66 @@ void SkeletonPlayer::buildBoneNodes() {
     m_boneNodes.clear();
     
     std::unordered_set<int> skeletonNodes;
-    if (!m_model->skins.empty()) {
-        for (int jointIdx : m_model->skins[0].joints) {
-            skeletonNodes.insert(jointIdx);
+    if (m_model->skins_count > 0) {
+        const auto& skin = m_model->skins[0];
+        for (uint32_t i = 0; i < skin.joints_count; i++) {
+            skeletonNodes.insert(skin.joints[i]);
         }
     }
 
-    for (size_t i = 0; i < m_model->nodes.size(); ++i) {
+    for (uint32_t i = 0; i < m_model->nodes_count; i++) {
         auto& gltfNode = m_model->nodes[i];
         
-        bool isImportant = skeletonNodes.count(i) || !gltfNode.children.empty();
+        bool isImportant = skeletonNodes.count(i) || gltfNode.children_count > 0;
         
         if (isImportant) {
-            auto bone = BoneNode::create(i, gltfNode.name.empty() ? fmt::format("bone_{}", i) : gltfNode.name);
+            const std::string nodeName = ModelUtils::toString(gltfNode.name);
+            auto bone = BoneNode::create(i, nodeName.empty() ? fmt::format("bone_{}", i) : nodeName);
             
             Vec3 t = Vec3::zero();
             Vec3 s = Vec3::one();
             Quat r = Quat::identity();
 
-            if (gltfNode.translation.size() == 3){
-                t = {
-                    static_cast<float>(gltfNode.translation[0]),
-                    static_cast<float>(gltfNode.translation[1]),
-                    static_cast<float>(gltfNode.translation[2])
-                };
-            }
-            if (gltfNode.rotation.size() == 4){
-                r = {
-                    static_cast<float>(gltfNode.rotation[0]),
-                    static_cast<float>(gltfNode.rotation[1]),
-                    static_cast<float>(gltfNode.rotation[2]),
-                    static_cast<float>(gltfNode.rotation[3])
-                };
-            }
-            if (gltfNode.scale.size() == 3){
-                s = {
-                    static_cast<float>(gltfNode.scale[0]),
-                    static_cast<float>(gltfNode.scale[1]),
-                    static_cast<float>(gltfNode.scale[2])
-                };
-            }
+            t = {
+                static_cast<float>(gltfNode.translation[0]),
+                static_cast<float>(gltfNode.translation[1]),
+                static_cast<float>(gltfNode.translation[2])
+            };
+            r = {
+                static_cast<float>(gltfNode.rotation[0]),
+                static_cast<float>(gltfNode.rotation[1]),
+                static_cast<float>(gltfNode.rotation[2]),
+                static_cast<float>(gltfNode.rotation[3])
+            };
+            s = {
+                static_cast<float>(gltfNode.scale[0]),
+                static_cast<float>(gltfNode.scale[1]),
+                static_cast<float>(gltfNode.scale[2])
+            };
             
             bone->updateFromGLTF(t, r, s);
             m_boneNodes[i] = bone;
         }
     }
 
-    for (size_t i = 0; i < m_model->nodes.size(); ++i) {
+    for (uint32_t i = 0; i < m_model->nodes_count; i++) {
         if (!m_boneNodes.count(i)) continue;
 
-        for (int child : m_model->nodes[i].children) {
+        for (uint32_t childIndex = 0; childIndex < m_model->nodes[i].children_count; childIndex++) {
+            const int child = m_model->nodes[i].children[childIndex];
             if (!m_boneNodes.count(child)) continue;
             
             m_boneNodes[i]->addChild(m_boneNodes[child]);
         }
     }
 
-    int sceneIndex = m_model->defaultScene > -1 ? m_model->defaultScene : 0;
-    for (int rootIdx : m_model->scenes[sceneIndex].nodes) {
+    int sceneIndex = m_model->default_scene > -1 ? m_model->default_scene : 0;
+
+    if (static_cast<uint32_t>(sceneIndex) >= m_model->scenes_count) return;
+
+    const auto& scene = m_model->scenes[sceneIndex];
+    for (uint32_t i = 0; i < scene.nodes_count; i++) {
+        auto rootIdx = scene.nodes[i];
         if (!m_boneNodes.count(rootIdx)) continue;
 
         this->addChild(m_boneNodes[rootIdx]);
@@ -484,18 +516,24 @@ void SkeletonPlayer::buildBoneNodes() {
 
 void SkeletonPlayer::extractAnimations() {
     m_animations.clear();
-    if (m_model->animations.empty()) return;
+    if (m_model->animations_count == 0) return;
 
-    for (auto& gltfAnim : m_model->animations) {
-        Animation anim;
-        anim.name = gltfAnim.name.empty() ? fmt::format("anim_{}", m_animations.size()) : gltfAnim.name;
+    for (uint32_t animIndex = 0; animIndex < m_model->animations_count; animIndex++) {
+        const auto& gltfAnim = m_model->animations[animIndex];
+        auto animationName = ModelUtils::toString(gltfAnim.name);
+        Animation anim{
+            .name = animationName.empty() ? fmt::format("anim_{}", m_animations.size()) : animationName
+        };
         
-        for (auto& channel : gltfAnim.channels) {
+        for (uint32_t channelIndex = 0; channelIndex < gltfAnim.channels_count; channelIndex++) {
+            const auto& channel = gltfAnim.channels[channelIndex];
             auto& sampler = gltfAnim.samplers[channel.sampler];
-            Track track;
-            track.targetNode = channel.target_node;
-            track.path = channel.target_path;
-            track.interpolation = sampler.interpolation;
+
+            Track track{
+                .targetNode = channel.target.node,
+                .path = ModelUtils::toString(channel.target.path),
+                .interpolation = ModelUtils::toString(sampler.interpolation)
+            };
 
             extractFloatData(sampler.input, 1, false, [&](const std::vector<float>& vals) {
                 track.times.push_back(vals[0]);
@@ -525,8 +563,8 @@ void SkeletonPlayer::applyAnimations(float time) {
             nextFrame = frame;
             factor = 0.f;
         } else {
-            for (size_t i = 0; i < track.times.size() - 1; ++i) {
-                if (time < track.times[i] || time >= track.times[i+1]) continue;
+            for (size_t i = 0; i < track.times.size() - 1; i++) {
+                if (time < track.times[i] || time >= track.times[i + 1]) continue;
 
                 frame = i; 
                 nextFrame = i + 1;
@@ -537,57 +575,57 @@ void SkeletonPlayer::applyAnimations(float time) {
             }
         }
 
-        int vIdx0 = frame;
-        int vIdx1 = nextFrame;
+        int index0 = frame;
+        int index1 = nextFrame;
         
         if (track.interpolation == GLB_ANIM_INTERPOLATION_CUBICSPLINE) {
-            vIdx0 = frame * 3 + 1;
-            vIdx1 = nextFrame * 3 + 1;
+            index0 = frame * 3 + 1;
+            index1 = nextFrame * 3 + 1;
         }
 
-        if (vIdx1 >= track.values.size()) continue;
+        if (index1 >= track.values.size()) continue;
 
-        auto& v0 = track.values[vIdx0]; 
-        auto& v1 = track.values[vIdx1];
+        auto& value0 = track.values[index0]; 
+        auto& value1 = track.values[index1];
         auto bone = m_boneNodes[track.targetNode];
 
         if (track.path == GLB_ANIM_PATH_TRANSLATION) {
             Vec3 t = Vec3::lerp({
-                    v0[0], 
-                    v0[1], 
-                    v0[2]
+                    value0[0], 
+                    value0[1], 
+                    value0[2]
                 }, {
-                    v1[0], 
-                    v1[1], 
-                    v1[2]
+                    value1[0], 
+                    value1[1], 
+                    value1[2]
                 }, factor
             );
             bone->updateFromGLTF(t, std::nullopt, std::nullopt);
         } 
         else if (track.path == GLB_ANIM_PATH_SCALE) {
             Vec3 s = Vec3::lerp({
-                    v0[0], 
-                    v0[1], 
-                    v0[2]
+                    value0[0], 
+                    value0[1], 
+                    value0[2]
                 }, {
-                    v1[0], 
-                    v1[1], 
-                    v1[2]
+                    value1[0], 
+                    value1[1], 
+                    value1[2]
                 }, factor
             );
             bone->updateFromGLTF(std::nullopt, std::nullopt, s);
         } 
         else if (track.path == GLB_ANIM_PATH_ROTATION) {
             Quat q = Quat::nlerp({
-                    v0[0], 
-                    v0[1], 
-                    v0[2], 
-                    v0[3]
+                    value0[0], 
+                    value0[1], 
+                    value0[2], 
+                    value0[3]
                 }, {
-                    v1[0], 
-                    v1[1], 
-                    v1[2], 
-                    v1[3]
+                    value1[0], 
+                    value1[1], 
+                    value1[2], 
+                    value1[3]
                 }, factor);
             bone->updateFromGLTF(std::nullopt, q, std::nullopt);
         }
@@ -596,9 +634,14 @@ void SkeletonPlayer::applyAnimations(float time) {
 
 void SkeletonPlayer::recalcGlobalMatrices(int nodeIndex, const Mat4& parentGlobal) {
     if (m_boneNodes.find(nodeIndex) == m_boneNodes.end()) {
-        for (int child : m_model->nodes[nodeIndex].children) {
-            recalcGlobalMatrices(child, parentGlobal);
+        if (nodeIndex >= 0 && static_cast<uint32_t>(nodeIndex) < m_model->nodes_count) {
+            const auto& node = m_model->nodes[nodeIndex];
+
+            for (uint32_t i = 0; i < node.children_count; i++) {
+                recalcGlobalMatrices(node.children[i], parentGlobal);
+            }
         }
+        
         return;
     }
 
@@ -606,10 +649,10 @@ void SkeletonPlayer::recalcGlobalMatrices(int nodeIndex, const Mat4& parentGloba
     
     bone->setGlobalMatrix(parentGlobal * Mat4::fromTRS(bone->getLocalTranslation(), bone->getLocalRotation(), bone->getLocalScale()));
 
-    if (!m_model->skins.empty()) {
+    if (m_model->skins_count > 0) {
         auto& skin = m_model->skins[0];
 
-        for (size_t i = 0; i < skin.joints.size(); ++i) {
+        for (uint32_t i = 0; i < skin.joints_count; i++) {
             if (skin.joints[i] != nodeIndex) continue;
 
             m_globalJointMatrices[i] = bone->getGlobalMatrix() * m_inverseBindMatrices[i];
@@ -617,8 +660,9 @@ void SkeletonPlayer::recalcGlobalMatrices(int nodeIndex, const Mat4& parentGloba
         }
     }
 
-    for (int child : m_model->nodes[nodeIndex].children) {
-        recalcGlobalMatrices(child, bone->getGlobalMatrix());
+    const auto& node = m_model->nodes[nodeIndex];
+    for (uint32_t i = 0; i < node.children_count; i++) {
+        recalcGlobalMatrices(node.children[i], bone->getGlobalMatrix());
     }
 }
 
@@ -635,7 +679,7 @@ void SkeletonPlayer::applySkinning() {
             frame = m_customFrames[sub.nodeName];
         }
 
-        for (size_t i = 0; i < sub.basePositions.size(); ++i) {
+        for (size_t i = 0; i < sub.basePositions.size(); i++) {
             Vec3 base = sub.basePositions[i];
             Vec3 finalPos = Vec3::zero();
 
@@ -644,9 +688,16 @@ void SkeletonPlayer::applySkinning() {
                 Vec4 w = sub.weights[i];
                 Vec4 j = sub.joints[i];
 
-                for (int k = 0; k < 4; ++k) {
-                    float weight = (k==0)?w.x : (k==1)?w.y : (k==2)?w.z : w.w;
-                    int jointIdx = static_cast<int>((k==0)?j.x : (k==1)?j.y : (k==2)?j.z : j.w);
+                for (int k = 0; k < 4; k++) {
+                    float weight =
+                        (k == 0) ? w.x :
+                        (k == 1) ? w.y :
+                        (k == 2) ? w.z : w.w;
+                    int jointIdx = static_cast<int>(
+                        (k == 0) ? j.x : 
+                        (k == 1) ? j.y :
+                        (k == 2) ? j.z : j.w
+                    );
 
                     if (weight > 0.f && jointIdx >= 0 && jointIdx < m_globalJointMatrices.size()) {
                         Vec3 transformed = m_globalJointMatrices[jointIdx] * base;
@@ -662,9 +713,9 @@ void SkeletonPlayer::applySkinning() {
             sub.renderVertices[i].pos = finalPos * GLB_PIXEL_SCALE;
 
             if (frame) {
-                CCRect rect = frame->getRectInPixels();
-                CCSize texSize = frame->getTexture()->getContentSizeInPixels();
-                Vec2 origUV = sub.uvs[i];
+                auto rect = frame->getRectInPixels();
+                auto texSize = frame->getTexture()->getContentSizeInPixels();
+                auto origUV = sub.uvs[i];
 
                 if (!frame->isRotated()) {
                     sub.renderVertices[i].uv.x = (rect.origin.x + origUV.x * rect.size.width) / texSize.width;
@@ -689,41 +740,65 @@ void SkeletonPlayer::applySkinning() {
 
 void SkeletonPlayer::extractFloatData(int accessorIndex, int expectedComponents, bool isWeight, std::function<void(const std::vector<float>&)> callback) {
     if (accessorIndex < 0) return;
+
     auto& accessor = m_model->accessors[accessorIndex];
-    auto& bufferView = m_model->bufferViews[accessor.bufferView];
+
+    if (accessor.buffer_view < 0 || static_cast<uint32_t>(accessor.buffer_view) >= m_model->buffer_views_count) return;
+
+    auto& bufferView = m_model->buffer_views[accessor.buffer_view];
     auto& buffer = m_model->buffers[bufferView.buffer];
     
-    const unsigned char* data = buffer.data.data() + bufferView.byteOffset + accessor.byteOffset;
+    const unsigned char* data = buffer.data.data + bufferView.byte_offset + accessor.byte_offset;
     
-    int compSize = 4;
-    if (accessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT) compSize = 2;
-    if (accessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE) compSize = 1;
+    size_t compSize = 0;
+    switch (accessor.component_type) {
+        case TG3_COMPONENT_TYPE_FLOAT:
+            compSize = sizeof(uint32_t);
+            break;
+        case TG3_COMPONENT_TYPE_UNSIGNED_SHORT:
+            compSize = sizeof(uint16_t);
+            break;
+        case TG3_COMPONENT_TYPE_UNSIGNED_BYTE:
+            compSize = sizeof(uint8_t);
+            break;
+        default:
+            return;
+    }
     
-    int stride = bufferView.byteStride ? bufferView.byteStride : (expectedComponents * compSize);
+    const size_t stride = bufferView.byte_stride ? bufferView.byte_stride : (expectedComponents * compSize);
 
     float normalizeFactor = 1.0f;
     if (accessor.normalized || isWeight) {
-        if (accessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT) normalizeFactor = 65535.0f;
-        if (accessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE) normalizeFactor = 255.0f;
+        if (accessor.component_type == TG3_COMPONENT_TYPE_UNSIGNED_SHORT) 
+            normalizeFactor = 65535.0f;
+        if (accessor.component_type == TG3_COMPONENT_TYPE_UNSIGNED_BYTE)
+            normalizeFactor = 255.0f;
     }
+
+    const auto readLittleEndian = [](const unsigned char* bytes, size_t byteCount) -> uint32_t {
+        uint32_t value = 0;
+        for (size_t byte = 0; byte < byteCount; byte++) {
+            value |= static_cast<uint32_t>(bytes[byte]) << (byte * 8);
+        }
+        return value;
+    };
 
     for (size_t i = 0; i < accessor.count; ++i) {
         std::vector<float> vals(expectedComponents, 0.0f);
-        const unsigned char* ptr = data + (i * stride);
+        auto element = data + i * stride;
         
         for (int c = 0; c < expectedComponents; ++c) {
-            if (accessor.componentType == TINYGLTF_COMPONENT_TYPE_FLOAT) {
-                float v;
-                memcpy(&v, ptr + c * 4, 4);
-                vals[c] = v;
-            } else if (accessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT) {
-                unsigned short v;
-                memcpy(&v, ptr + c * 2, 2);
-                vals[c] = v / normalizeFactor;
-            } else if (accessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE) {
-                unsigned char v;
-                memcpy(&v, ptr + c, 1);
-                vals[c] = v / normalizeFactor;
+            auto* component = element + c * compSize;
+            switch (accessor.component_type) {
+                case TG3_COMPONENT_TYPE_FLOAT:
+                    vals[c] = std::bit_cast<float>(readLittleEndian(component, compSize));
+                    break;
+                case TG3_COMPONENT_TYPE_UNSIGNED_SHORT:
+                    vals[c] = static_cast<uint16_t>(readLittleEndian(component, compSize)) / normalizeFactor;
+                    break;
+                case TG3_COMPONENT_TYPE_UNSIGNED_BYTE:
+                    vals[c] = readLittleEndian(component, compSize) / normalizeFactor;
+                    break;
             }
         }
         callback(vals);
@@ -749,7 +824,7 @@ std::vector<float> SkeletonPlayer::sampleTrack(const Track& track, float time) {
         frame = track.times.size() - 1;
         nextFrame = frame;
     } else {
-        for (size_t i = 0; i < track.times.size() - 1; ++i) {
+        for (size_t i = 0; i < track.times.size() - 1; i++) {
             if (time < track.times[i] || time >= track.times[i + 1]) continue;
 
             frame = i;
@@ -760,12 +835,13 @@ std::vector<float> SkeletonPlayer::sampleTrack(const Track& track, float time) {
         }
     }
 
-    int vIdx0 = (track.interpolation == GLB_ANIM_INTERPOLATION_CUBICSPLINE) ? frame * 3 + 1 : frame;
-    int vIdx1 = (track.interpolation == GLB_ANIM_INTERPOLATION_CUBICSPLINE) ? nextFrame * 3 + 1 : nextFrame;
+    int index0 = (track.interpolation == GLB_ANIM_INTERPOLATION_CUBICSPLINE) ? frame * 3 + 1 : frame;
+    int index1 = (track.interpolation == GLB_ANIM_INTERPOLATION_CUBICSPLINE) ? nextFrame * 3 + 1 : nextFrame;
     
-    std::vector<float> result(track.values[vIdx0].size());
-    for(size_t i = 0; i < result.size(); ++i) {
-        result[i] = track.values[vIdx0][i] + (track.values[vIdx1][i] - track.values[vIdx0][i]) * factor;
+    std::vector<float> result(track.values[index0].size());
+
+    for (size_t i = 0; i < result.size(); i++) {
+        result[i] = track.values[index0][i] + (track.values[index1][i] - track.values[index0][i]) * factor;
     }
     return result;
 }
@@ -788,16 +864,24 @@ void SkeletonPlayer::playAnimation(const std::string& name, float blendTime) {
     }
 }
 
- std::vector<std::string> SkeletonPlayer::getAnimationNames(){
+std::vector<std::string> SkeletonPlayer::getAnimationNames() {
     std::vector<std::string> ret{};
-    for (const auto& anim : m_animations)
-    {
+    for (const auto& anim : m_animations) {
         ret.push_back(anim.first);
     }
-    
-    return ret;
- }
 
- void SkeletonPlayer::setAnimSpeedMultiplier(float multiplier){
-    m_animSpeedModifier = multiplier;
- }
+    return ret;
+}
+
+void SkeletonPlayer::setAnimSpeedMultiplier(float multiplier) {
+   m_animSpeedModifier = multiplier;
+}
+
+const tg3_str_int_pair* SkeletonPlayer::findAttribute(const tg3_primitive& primitive, const char* name) {
+    for (uint32_t i = 0; i < primitive.attributes_count; i++) {
+        if (tg3_str_equals_cstr(primitive.attributes[i].key, name)) {
+            return &primitive.attributes[i];
+        }
+    }
+    return nullptr;
+}

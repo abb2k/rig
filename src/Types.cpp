@@ -1,7 +1,5 @@
 #include <Types.hpp>
 
-#include <cmath>
-
 // ===================
 // Vec2
 
@@ -63,7 +61,7 @@ Vec3 Quat::toEuler() const {
 }
 
 Quat Quat::nlerp(const Quat& a, const Quat& b, float t) {
-    float dot = a.x*b.x + a.y*b.y + a.z*b.z + a.w*b.w;
+    float dot = a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
     float sign = (dot < 0.0f) ? -1.0f : 1.0f;
 
     Quat result = {
@@ -75,7 +73,7 @@ Quat Quat::nlerp(const Quat& a, const Quat& b, float t) {
 
     float mag = result.magnetude();
     if (mag > 0.0001f) {
-        return {result.x/mag, result.y/mag, result.z/mag, result.w/mag};
+        return {result.x / mag, result.y / mag, result.z / mag, result.w / mag};
     }
     return Quat::identity();
 }

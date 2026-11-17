@@ -7,11 +7,11 @@
 
 using namespace geode::prelude;
 
-namespace tinygltf { class Model; }
+struct RigGLTFModel;
 
 class RIG_DLL SkeletonPlayer : public CCNode, public CCRGBAProtocol {
 private:
-    std::shared_ptr<tinygltf::Model> m_model;
+    std::shared_ptr<RigGLTFModel> m_model;
     bool m_loaded = false;
     bool m_paused = false;
     float m_time = 0.f;
@@ -69,6 +69,8 @@ private:
 
     std::vector<float> sampleTrack(const Track& track, float time);
 
+    const tg3_str_int_pair* findAttribute(const tg3_primitive& primitive, const char* name);
+
 public:
     static SkeletonPlayer* create();
 
@@ -110,7 +112,7 @@ public:
     void setSpriteForMesh(const std::string& meshName, const std::string& spriteName);
     void setSpriteForMeshWithFrameName(const std::string& meshName, const std::string& frameName);
 
-    void loadFromGLTF(const std::shared_ptr<tinygltf::Model>& model);
+    void loadFromGLTF(const std::shared_ptr<RigGLTFModel>& model);
 
     void update(float dt) override;
 
@@ -119,7 +121,7 @@ public:
     void playAnimation(const std::string& name, float blendTime = 0);
     std::vector<std::string> getAnimationNames();
 
-    std::shared_ptr<tinygltf::Model> getModel() const { return m_model; }
+    std::shared_ptr<RigGLTFModel> getModel() const { return m_model; }
 
     void setAnimSpeedMultiplier(float multiplier);
     float getAnimSpeedMultiplier() const { return m_animSpeedModifier; }

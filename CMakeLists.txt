@@ -8,40 +8,39 @@ else()
 endif()
 set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 
-project(rig VERSION 1.0.0)
+project(rig VERSION 1.0.0 LANGUAGES C CXX)
 
 include(FetchContent)
 
 FetchContent_Declare(
     tinygltf
     GIT_REPOSITORY https://github.com/syoyo/tinygltf.git
-    GIT_TAG release
+    GIT_TAG v3.1.0
 )
 
+set(TINYGLTF3_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(TINYGLTF3_INSTALL OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(tinygltf)
 
-# --- NEW VENDORING LOGIC ---
-# Define where we want to copy the headers inside your include folder
-set(EXT_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include/rig/ext")
-
-# Create the directory if it doesn't exist
-file(MAKE_DIRECTORY ${EXT_INCLUDE_DIR})
-
-# Copy the headers from the fetched tinygltf repo directly into your mod's include folder
-file(COPY 
-    "${tinygltf_SOURCE_DIR}/tiny_gltf.h"
-    "${tinygltf_SOURCE_DIR}/stb_image.h"
-    "${tinygltf_SOURCE_DIR}/stb_image_write.h"
-    "${tinygltf_SOURCE_DIR}/json.hpp"
-    DESTINATION ${EXT_INCLUDE_DIR}
+configure_file(
+    "${tinygltf_SOURCE_DIR}/tiny_gltf_v3.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/tiny_gltf_v3.h"
+    COPYONLY
 )
-# ---------------------------
+
+add_library(tinygltf3 STATIC "${tinygltf_SOURCE_DIR}/tiny_gltf_v3.c")
+set_target_properties(tinygltf3 PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED ON
+    C_EXTENSIONS OFF
+)
+target_include_directories(tinygltf3 PUBLIC "${tinygltf_SOURCE_DIR}")
+target_compile_definitions(tinygltf3 PRIVATE TINYGLTF3_ENABLE_FS)
 
 file(GLOB_RECURSE SOURCES src/*.cpp)
 add_library(${PROJECT_NAME} SHARED ${SOURCES})
-
-# We no longer need to link tinygltf_SOURCE_DIR as PRIVATE because 
-# the headers are now physically inside your own include directory!
+target_include_directories(${PROJECT_NAME} PUBLIC "${tinygltf_SOURCE_DIR}")
+target_link_libraries(${PROJECT_NAME} tinygltf3)
 
 if(NOT DEFINED ENV{GEODE_SDK})
     message(FATAL_ERROR "Unable to find Geode SDK! Please define GEODE_SDK environment variable to point to Geode")
@@ -49,9 +48,7 @@ else()
     message(STATUS "Found Geode: $ENV{GEODE_SDK}")
 endif()
 
-# This include_directories call will now pick up the copied tiny_gltf headers
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}/include")
-include_directories("${CMAKE_CURRENT_SOURCE_DIR}/include/rig/ext")
 add_subdirectory($ENV{GEODE_SDK} ${CMAKE_CURRENT_BINARY_DIR}/geode)
 
 setup_geode_mod(${PROJECT_NAME})
